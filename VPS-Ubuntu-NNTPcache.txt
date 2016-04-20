@@ -1,0 +1,214 @@
+Configuration of NNTPcache Ubuntu 12.04 server (OpenVZ)
+
+if getting locale issue:
+root@USSERVER02:~# locale
+locale: Cannot set LC_CTYPE to default locale: No such file or directory
+locale: Cannot set LC_MESSAGES to default locale: No such file or directory
+locale: Cannot set LC_ALL to default locale: No such file or directory
+
+Then follow the following link:  http://askubuntu.com/questions/162391/how-do-i-fix-my-locale-issue
+
+sudo update-locale if you get the following error in the eventlog from cron:
+pam_env(cron:session): Unable to open env file: /etc/default/locale: No such file or directory
+
+
+- Add the apt-history function to /etc/bash.bashrc - allows you to replay package history (so U can replicate it elsewhere if needed)
+### pars for fun: install | remove | rollback
+function apt-history(){
+      case "$1" in
+        install)
+              cat /var/log/dpkg.log | grep 'install '
+              ;;
+        upgrade|remove)
+              cat /var/log/dpkg.log | grep $1
+              ;;
+        rollback)
+              cat /var/log/dpkg.log | grep upgrade | \
+                  grep "$2" -A10000000 | \
+                  grep "$3" -B10000000 | \
+                  awk '{print $4"="$5}'
+              ;;
+        *)
+              cat /var/log/dpkg.log
+              ;;
+      esac
+}
+
+
+In OpenVZ container w/ rsyslog I had to run this command to disable imklog module, otherwise it hogs CPU (from https://bugs.launchpad.net/ubuntu/+source/rsyslog/+bug/523610 post #49).  Seems OpenVZ disables access to kernel logging module anyway.
+sed -i -e 's/^\$ModLoad imklog/#\$ModLoad imklog/g' /etc/rsyslog.conf
+
+htop
+ntp
+telnet-ssl
+add aliases to /etc/bash.bashrc
+# apt-get purge sysklogd
+# - Get the latest version of rsyslog (stable)
+#	add-apt-repository ppa:tmortensen/rsyslogv7 && apt-get update && apt-get install rsyslog
+apt-get install syslog-ng
+When installing syslog-ng (OpenVZ), you'll get the following error:
+	syslog-ng: Error setting capabilities, capability management disabled; error='Operation not permitted'
+Solution:  http://pyro.eu.org/how-to/micro/syslog-ng-error-setting-capabilities-openvz.txt
+	syslog-ng --no-caps
+
+	Debian:
+	/etc/default/syslog-ng:SYSLOGNG_OPTS="--no-caps"
+
+
+install libldap2-dev, libpam0g-dev (ONLY NEED THIS IF YOU'RE COMPILING NNTPCACHE.  IF COPYING OVER, Don't need this step.  Note...easier to compile, there are dependencies scattered in multiple directories.)
+Install libpam-pwdfile (allows for PAM to read a hash based flat file)
+Create /etc/pam.d/nntpcache
+	#%PAM-1.0
+	auth            required         /lib/security/pam_pwdfile.so pwdfile /etc/nntpcache/nntpcache.users
+	account         required         pam_permit.so
+
+Enable "compress" for logrotate (in /etc/logrotate.conf)
+
+- INSTALL NNTP2NNTP
+install python-setuptools
+install python-pip
+# install python-dev
+install python-mysqldb
+install python-openssl
+install python-twisted
+install authbind (allows NNTP2NNTP to listen on privileged ports)
+vi /etc/authbind/byuid/<userid of news>  (in the case of VPS, 9, so vi /etc/authbind/byuid/9)
+0.0.0.0/0:1,1023
+
+*** pip install nntp2nntp  (NNTP proxy) -- *** No longer in the Python-pip repo it seems.  We'll need to copy/download manually (in sourceforge) and install the dependencies via pip or apt ***
+
+
+mkdir /var/run/nntp2nntp
+chown news.news /var/run/nntp2nntp
+mkdir /var/log/nntp2nntp
+chown news.news /var/log/nntp2nntp && chmod 755 /var/log/nntp2nntp
+mkdir /etc/nntp2nntp
+chown -R news.news /etc/nntp2nntp/ && chmod 700 /etc/nntp2nntp
+modify /usr/local/bin/nntp2nntp.py file according to dropbox copy
+
+Copy NNTP2NNTP INIT SCRIPT from dropbox into /etc/init.d/nntp2nntp
+
+ADD INIT SCRIPT TO AUTOSTART (Run the following command as root or sudo)
+	updaterc.d nntp2nntp defaults
+
+NNTP2NNTP LOGROTATE - Add the following to /etc/logrotate.d
+/var/log/nntp2nntp/*.log {
+	daily
+	missingok
+	rotate 7
+	compress
+	notifempty
+	create 640 news news
+	sharedscripts
+	postrotate
+		/etc/init.d/nntp2nntp start > /dev/null
+	endscript
+	prerotate
+		/etc/init.d/nntp2nntp stop > /dev/null
+	endscript
+}
+
+
+INSTALL NNTPCACHE
+chmod 600 /etc/nntpcache/nntpcache.{servers,access}
+chown news.news /etc/nntpcache/nntpcache.{servers,access}
+make sure no config.cache file exists in your nntpcache compiling directory
+./configure --prefix=/usr/lib/news/         --bindir=/usr/lib/news/bin/         --sbindir=/usr/sbin/         --libexecdir=/usr/lib/news/bin/         --datadir=/var/spool/news/         --sysconfdir=/etc/          --sharedstatedir=/var/spool/news/         --localstatedir=/var/lib/news/         --libdir=/lib/         --includedir=/usr/include/         --mandir=/usr/share/man/         --infodir=/usr/share/info/ --with-authinfo-pam --with-authinfo-passwd
+make
+sudo make install
+
+LOGROTATE
+add the following to one of the entries of /etc/logrotate.d/syslog-ng (or rsyslog if using that)
+/var/log/news/news.notice
+/var/log/news/news.crit
+/var/log/news/news.err
+
+- Add the following to /etc/rsyslog.d/50-default.conf (line needs to be modified, add news.none to it)
+# Added news.none to the following line. Don't need NNTPcache logging to syslog
+*.*;auth,authpriv.none;\                
+        news.none               -/var/log/syslog
+
+- Add the init script as /etc/init.d/nntpcache
+
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:             nntpcached
+# Required-Start:       $remote_fs $syslog
+# Required-Stop:        $remote_fs $syslog
+# Default-Start:        2 3 4 5
+# Default-Stop:         0 1 6 
+# Short-Description:    NNTP Cache Server
+### END INIT INFO
+
+
+test -f /usr/sbin/nntpcached || exit 0
+
+. /lib/lsb/init-functions
+
+PID_DIR=/var/run/nntpcache
+
+RUN_AS=news
+
+case "$1" in
+        start)  log_daemon_msg "Starting NNTP Cache server" "nntpcache"
+                if [ ! -d $PID_DIR ] ; then
+                        mkdir $PID_DIR
+                        chown $RUN_AS:$RUN_AS $PID_DIR
+                fi
+                start-stop-daemon --start --quiet --name nntpcached --startas /usr/sbin/nntpcached --
+                log_end_msg $?
+        ;;
+        stop)   log_daemon_msg "Stopping NNTP Cache server" "nntpcache"
+                start-stop-daemon --stop --quiet --name nntpcached
+                log_end_msg $?
+        ;;
+        status)
+                status_of_proc "/usr/sbin/nntpcached" "nntpcache" && exit 0 || exit $?
+        ;;
+        *)      log_action_msg "Usage: /etc/init.d/nntpcache {start|stop|status}"
+                exit 2
+        ;;
+esac
+exit 0
+
+ADD INIT SCRIPT TO AUTOSTART (Run the following command as root or sudo)
+	updaterc.d nntpcache defaults
+
+
+- NNTPCache authentication setup
+	- Install libpam-pwdfile (allows for PAM to read a hash based flat file)
+	- Create/modify the accounts file for nntpcache:  echo <username>:`openssl passwd -1 <password>` >> nntpcache.users
+	- Make sure nntpcache.users file is owned by news.news and permissions are 600
+	- create nntpcache pam auth file (/etc/pam.d/nntpcache)
+		- #%PAM-1.0
+		auth            required         /lib/security/pam_pwdfile.so pwdfile /etc/nntpcache/nntpcache.users
+		account         required         /lib/security/pam_permit.so
+	- Verify or add the following to /etc/nntpcache/nntpcache.config:
+		authinfoDefaultType     none
+		authinfoDefaultSource   passwd
+		pipeProgram             /usr/lib/news/bin/unixauth
+		pipeTimeout             20
+		pamModuleName           nntpcache
+
+- Misc permissions stuff
+	- Change owners of all /etc/nntpcache config files to news.news
+	- mkdir -p /var/cache/nntpcache && chown news.news /var/cache/nntpcache && chown 750 /var/cache/nntpcache
+	- mkdir -p /var/run/nntpcache && chown news.news /var/run/nntpcache && chown 750 /var/cache/nntpcache
+	- Change pidfile entry in nntpcache.config file to
+		pidFile                 /var/run/nntpcache/nntpcache.pid
+
+- SSL for nntp2nntp - Run the following command to generate private key and CSR
+	- openssl req -nodes -newkey rsa:2048 -keyout new-digitss.key -out new-digitss.csr
+	- Submit the csr to provider (whoever) and get the public key
+	- If you have the keys saved, copy them from location into /etc/ssl/private/ directory
+	- usermod -G ssl-cert news
+	- Configure nntp2nntp
+
+- Nagios/Icinga monitoring
+	- copy /usr/lib/nagios/plugins/check_mem to the target server  (Not sure why this isn't a package!!!)
+	- Copy entire /etc/nagios/* (including subdirs) to the target server
+
+
+
+

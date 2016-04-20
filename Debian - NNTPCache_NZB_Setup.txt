@@ -1,0 +1,244 @@
+Debian Install Setup
+
+• Add aliases to /etc/bash.bashrc
+• Add username to sudo group in /etc/group
+• install htop, vim, chkconfig, ntp, python-software-properties
+• install libldap2-dev, libpam0g-dev (this is for nntpcache compile with LDAP and PAM support)
+• Disable IPv6 (http://mindref.blogspot.com/2010/12/debian-disable-ipv6_22.html)
+• Disable bluetooth, avahi-daemon, fancontrol, saned
+• Enable syntax highlighting in vim (http://www.howtoforge.com/forums/showthread.php?t=13715)
+• Add /sbin:/usr/sbin:/usr/local/sbin to PATH (http://www.linuxquestions.org/questions/linux-newbie-8/how-to-set-path-variables-403964/)
+• Enable X forwarding within SSH (for GUI apps) (add to /etc/ssh/sshd_config)
+∘ # Added to make X forwarding work
+		X11UseLocalHost no
+
+• Enable "compress" for logrotate (in /etc/logrotate.conf)
+• Vsphere VM only
+∘ Install VM Tools (http://www.surlyjake.com/2011/02/install-open-vm-tools-on-debian-6-squeeze/)
+• Graphical Install only
+∘ Disable GUI as default (http://www.debianadmin.com/howto-boot-debian-in-text-mode-instead-of-graphical-mode-gui.html)
+∘ Listed as gdm3 in Squeeze
+• If you receive the following error message: mpt-statusd: detected non-optimal RAID status
+∘ Since it's a VM, disable the service (http://www.linuxquestions.org/questions/debian-26/debian-reports-non-optimal-raid-status-866272/)
+∘ /etc/init.d/mpt-statusd stop
+∘ update-rc.d-insserv -f mpt-statusd remove
+• SNAPSHOT OR TEMPLATE (if possible)!!!!
+
+NNTPcache install (http://www.aioe.org/index.php?nntpcache)
+• Run configure for NNTPcache ( ../configure         --prefix=/usr/lib/news/         --bindir=/usr/lib/news/bin/         --sbindir=/usr/sbin/         --libexecdir=/usr/lib/news/bin/         --datadir=/var/spool/news/         --sysconfdir=/etc/          --sharedstatedir=/var/spool/news/         --localstatedir=/var/lib/news/         --libdir=/lib/         --includedir=/usr/include/         --mandir=/usr/share/man/         --infodir=/usr/share/info/ --with-authinfo-pam --with-authinfo-passwd )
+∘ NOTE:  --with-authinfo-ldap causes an error in authinfo_ldap.c (eventually need to fix)
+• Run make followed by sudo -u root make install
+• Configure rsyslog.conf
+∘ #
+		# Logging for INN news system.
+		#
+		news.crit                       /var/log/news/news.crit
+		news.err                        /var/log/news/news.err
+		news.info;news.notice           -/var/log/news/news.notice
+		# news.debug                      -/var/log/news/news.debug
+• Add the following to /etc/logrotate.d/rsyslog (wherever appropriate)
+∘ /var/log/news/news.crit
+		/var/log/news/news.debug
+		/var/log/news/news.err
+		/var/log/news/news.notice
+• Change the /var/log/syslog line to include news.none (so NNTPcache doesn't flood that logfile!!!)
+∘ *.*;auth,authpriv.none;\
+                   news.none       -/var/log/syslog
+• Create add init script (again from http://www.aioe.org/index.php?nntpcache)
+∘ #!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:             nntpcached
+# Required-Start:       $remote_fs $syslog
+# Required-Stop:        $remote_fs $syslog
+# Default-Start:        2 3 4 5
+# Default-Stop:         0 1 6 
+# Short-Description:    NNTP Cache Server
+### END INIT INFO
+
+
+test -f /usr/sbin/nntpcached || exit 0
+
+. /lib/lsb/init-functions
+
+case "$1" in
+        start)  log_daemon_msg "Starting NNTP Cache server" "nntpcache"
+                start-stop-daemon --start --quiet --name nntpcached --startas /usr/sbin/nntpcached --
+                log_end_msg $?
+        ;;
+        stop)   log_daemon_msg "Stopping NNTP Cache server" "nntpcache"
+                start-stop-daemon --stop --quiet --name nntpcached
+                log_end_msg $?
+        ;;
+        status)
+                status_of_proc "/usr/sbin/nntpcached" "nntpcache" && exit 0 || exit $?
+        ;;
+        *)      log_action_msg "Usage: /etc/init.d/nntpcache {start|stop|status}"
+                exit 2
+        ;;
+esac
+exit 0
+
+NNTPCache SSL install (stunnel)  (http://www.debiantutorials.com/securing-unencrypted-traffic-with-stunnel/ ; http://fossies.org/unix/misc/old/NewsCache-1.2rc6.tar.gz:a/NewsCache-1.2rc6/doc/newscache-stunnel-ssl.txt)
+	
+	- Install stunnel (sudo apt-get install stunnel)
+	- openssl req -new -nodes -x509 -out /etc/stunnel/nntpcache.pem -keyout /etc/stunnel/nntpcache.pem
+		- Verify the certificate (pem) file is owned by root:root
+		- Also make sure the name matches the hostname you want to use for connection to (so no cert issues)
+		- Eventually need to work on getting a real cert (see if that can be handed off to Justinn, make the CSR)
+	- chmod 640 /etc/stunnel/nntpcache.pem
+	- make a copy of /etc/stunnel/stunnel.conf (cp stunnel.conf stunnel.conf.orig)
+	- configure for client connectivity (so it can be used to connect to remote NNTP service over SSL)
+		- ; Use it for client mode
+		  client = yes
+
+		 ; Service-level configuration
+
+		[nntp-easynews]
+		accept = 127.0.0.1:9563
+		connect = secure.news.easynews.com:563
+	- make a copy of the original stunnel.conf (cp stunnel.conf.orig stunnel-server.conf)
+	- configure for server connectivity (SSL proxy for NNTPCache)
+		- ; Certificate/key is needed in server mode and optional in client mode
+		;cert = /etc/ssl/certs/stunnel.pem
+		;key = /etc/ssl/certs/stunnel.pem
+		cert = /etc/stunnel/nntpcache.pem
+		key = /etc/stunnel/nntpcache.pem
+		- ; Some debugging stuff useful for troubleshooting
+			;debug = 7
+			output = /var/log/stunnel4/stunnel-server.log
+		- ; Service-level configuration
+		[nntps]
+		accept  = nntps
+		connect = localhost:nntp
+	- Add this to /etc/fstab so that stunnel has access to /etc once it's chrooted (http://ubuntuforums.org/showthread.php?t=1540725)
+		# Added to allow stunnel to work.  The chrooted stunnel needs access to /etc
+		# http://ubuntuforums.org/showthread.php?t=1540725
+		/etc            /var/lib/stunnel4/etc   none    bind    0       0
+	- Then add "delay = yes" to all stunnel conf files to delay DNS lookups until after stunnel is running
+	- Currently stunnel in daemon mode isn't working.  If still not working, run interactively
+		- add this command to /etc/rc.local: stunnel -D 5 -d nntps -r localhost:nntp -p /etc/stunnel/nntpcache.pem -s stunnel4 -g stunnel4 -f -P /var/lib/stunnel4/stunnel-server.pid   (can create a script)
+		- mv /etc/stunnel/stunnel-server.conf /etc/stunnel/stunnel-server.conf.disabled    (this disables it running as a service from init script)
+	- to kill/stop the interactive stunnel:   kill -TERM `cat /var/lib/stunnel4/stunnel-server.pid`  (can create a script)
+		
+NNTPCache authentication setup
+	- Install libpam-pwdfile (allows for PAM to read a hash based flat file)
+	- Create/modify the accounts file for nntpcache:  echo <username>:`openssl passwd -1 <password>` >> nntpcache.users
+	- Make sure nntpcache.users file is owned by news.news and permissions are 600
+	- create nntpcache pam auth file (/etc/pam.d/nntpcache)
+		- #%PAM-1.0
+		auth            required         /lib/security/pam_pwdfile.so pwdfile /etc/nntpcache/nntpcache.users
+		account         required         /lib/security/pam_permit.so
+	- Verify or add the following to /etc/nntpcache/nntpcache.config:
+		authinfoDefaultType     none
+		authinfoDefaultSource   passwd
+		pipeProgram             /usr/lib/news/bin/unixauth
+		pipeTimeout             20
+		pamModuleName           nntpcache
+
+
+Newznab Install  (based on http://newznab.readthedocs.org/en/latest/guides/install_ubuntu-11.10/  and  http://www.webhostingtalk.com/showthread.php?t=1025286)
+	- Create and properly permission the newznab directory
+		- sudo mkdir -p /var/www/newznab
+		  sudo chmod 777 /var/www/newznab
+	- Add dotdeb repository:
+		sudo sh -c "echo  \"\n#DotDeb\" >> /etc/apt/sources.list.d/dotdeb.list"
+		sudo sh -c "echo  \"deb http://packages.dotdeb.org stable all\" >> /etc/apt/sources.list.d/dotdeb.list"
+	- Get keys:
+		wget http://www.dotdeb.org/dotdeb.gpg
+		cat dotdeb.gpg | sudo apt-key add -
+		rm dotdeb.gpg
+	- Install PHP version 5 and php-fpm
+		- sudo apt-get install php5 php5-fpm php5-dev php-pear php5-gd php5-mysql php5-curl
+	- If installed, disable apache (removing apache seems to want to remove a lot of gnome dependencies, so not worth the headache)
+		- sudo /etc/init.d/apache2 stop
+		sudo update-rc.d apache2 disable
+	- Install nginx
+		- sudo apt-get install nginx
+	- Edit the php.ini file (sudo nano /etc/php5/cli/php.ini and /etc/php5/fpm/php.ini) and edit/add/verify the following:
+		- register_globals = Off
+		max_execution_time = 120
+		memory_limit = 256MB (or -1)
+		date.timezone = America/New_York
+	- Restart php-fpm  (sudo /etc/init.d/php5-fpm restart)
+	- Install Percona:  Add the percona keys and repository to APT:
+		- gpg --keyserver  hkp://keys.gnupg.net --recv-keys 1C4CBDCDCD2EFD2A
+		gpg -a --export CD2EFD2A | sudo apt-key add -
+		- sudo sh -c "echo  \"\n#Percona\" >> /etc/apt/sources.list.d/percona.list"
+		sudo sh -c "echo  \"deb http://repo.percona.com/apt squeeze main\" >> /etc/apt/sources.list.d/percona.list"
+		sudo sh -c "echo  \"deb-src http://repo.percona.com/apt squeeze main\" >> /etc/apt/sources.list.d/percona.list"
+	- Install the binaries
+		- sudo apt-get update
+		- sudo apt-get install -y percona-server-client-5.5 percona-server-server-5.5 libmysqlclient-dev
+	- Configure Nginx for newznab:
+		- server {
+# Change these settings to match your machine
+#    listen 80 default_server;
+    listen 8888;
+# SSL access
+    listen 8443 ssl;
+    ssl_certificate             /etc/ssl/homeaccess_geeketeers_com.crt;
+    ssl_certificate_key         /etc/ssl/homeaccess_geeketeers_com.key;
+#    server_name localhost;
+    server_name *.geeketeers.com *.brownnet.local;
+
+
+		# Everything below here doesn't need to be changed
+		    access_log /var/log/nginx/access.log;
+		    error_log /var/log/nginx/error.log;
+
+		    root /var/www/newznab/www/;
+		    index index.html index.htm index.php;
+
+		    location ~* \.(?:ico|css|js|gif|inc|txt|gz|xml|png|jpe?g) {
+			expires max;
+  			add_header Pragma public;
+			add_header Cache-Control "public, must-revalidate, proxy-revalidate";
+		    }
+
+		    location / { try_files $uri $uri/ @rewrites; }
+
+		    location @rewrites {
+		    	rewrite ^/([^/\.]+)/([^/]+)/([^/]+)/? /index.php?page=$1&id=$2&subpage=$3 last;
+			rewrite ^/([^/\.]+)/([^/]+)/?$ /index.php?page=$1&id=$2 last;
+			rewrite ^/([^/\.]+)/?$ /index.php?page=$1 last;
+		    }
+
+		    location /admin { }
+		    location /install { }
+
+		    location ~ \.php$ {
+	        	    include /etc/nginx/fastcgi_params;
+	        	    fastcgi_pass 127.0.0.1:9000;
+		
+	            # The next two lines should go in your fastcgi_params
+		            fastcgi_index       index.php;
+		            fastcgi_param       SCRIPT_FILENAME $document_root$fastcgi_script_name;
+	            # Added to fix the host header issue on the side panel in newznab
+	            fastcgi_param       SERVER_NAME     $host;
+
+    			}
+		}
+		- Disable the default Nginx site handler and enable the newznab configuration
+			sudo unlink /etc/nginx/sites-enabled/default
+			sudo ln -s /etc/nginx/sites-available/newznab /etc/nginx/sites-enabled/newznab	
+		- Restart Nginx (sudo service nginx restart)
+		
+Install additional dependencies for Newznab  (http://newznab.readthedocs.org/en/latest/guides/install_ubuntu-11.10/)
+		- Install unrar (sudo apt-get install unrar-free)
+		- Add the debian-multimedia repository  (http://pkgs.org/debian-squeeze/multimedia-main-amd64/mediainfo-gui_0.7.41-0.0_amd64.deb.html)
+			- sudo sh -c "echo  \"\n#Debian Multimedia\" >> /etc/apt/sources.list.d/debian-multimedia.list"
+			sudo sh -c "echo  \"deb http://www.deb-multimedia.org squeeze main non-free\" >> /etc/apt/sources.list.d/debian-multimedia.list"
+			sudo apt-get install deb-multimedia-keyring
+		- Install mediainfo
+			apt-add-repository ppa:shiki/mediainfo
+			(sudo apt-get update && apt-get install mediainfo)
+		- Install lame (sudo apt-get install lame)
+		- Install Sphinx(search).  Download from here (http://sphinxsearch.com/downloads/release/)
+			- wget http://sphinxsearch.com/files/sphinxsearch_2.0.6-release-1_amd64.deb
+			- sudo gdebi sphinxsearch_2.0.6-release-1_amd64.deb
+		- Install ffmpeg (sudo apt-get install ffmpeg)
+
+Install Newznab
+		- Install subversion (sudo apt-get install subversion)
+					

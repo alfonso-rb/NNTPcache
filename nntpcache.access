@@ -1,0 +1,25 @@
+# matching is top down, from the general to the specific. the LAST MATCH is 
+# dominant, except where the the "quick" keyword is used. If the last match
+# is a negation then access is refused.
+
+# host pattern          group           permissions             			filters userfiles
+*                       *               read,post
+
+# By default deny all
+*                       *               deny
+
+# nocem access
+<nocem@nntpcache>       *               read,quick
+
+# allow anyone from localhost to conncet to the web statistics port
+localhost               <http>          read,quick
+
+# Local connectivity
+# localhost             *               read,post,filter        			spam.filter
+# 127.0.0.1             *               read,post,filter        			spam.filter
+*                       *               read,filter,auth=user/pass;pam			spam.filter
+
+# strip some nonsense groups that waste resources
+*                       *.-.*,          deny,strip
+*                       *._.*           deny,strip
+

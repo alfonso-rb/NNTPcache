@@ -1,0 +1,41 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:             nntpcached
+# Required-Start:       $remote_fs $syslog
+# Required-Stop:        $remote_fs $syslog
+# Default-Start:        2 3 4 5
+# Default-Stop:         0 1 6 
+# Short-Description:    NNTP Cache Server
+### END INIT INFO
+
+
+test -f /usr/sbin/nntpcached || exit 0
+
+. /lib/lsb/init-functions
+
+RUN_AS=news
+
+PID_DIR=/var/run/nntpcache
+
+case "$1" in
+        start)  log_daemon_msg "Starting NNTP Cache server" "nntpcache"
+		if [ ! -d $PID_DIR ] ; then
+                	mkdir $PID_DIR
+                	chown $RUN_AS:$RUN_AS $PID_DIR
+		fi
+                start-stop-daemon --start --quiet --name nntpcached --startas /usr/sbin/nntpcached --
+                log_end_msg $?
+        ;;
+        stop)   log_daemon_msg "Stopping NNTP Cache server" "nntpcache"
+                start-stop-daemon --stop --quiet --name nntpcached
+                log_end_msg $?
+        ;;
+        status)
+                status_of_proc "/usr/sbin/nntpcached" "nntpcache" && exit 0 || exit $?
+        ;;
+        *)      log_action_msg "Usage: /etc/init.d/nntpcache {start|stop|status}"
+                exit 2
+        ;;
+esac
+exit 0

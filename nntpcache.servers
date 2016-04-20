@@ -1,0 +1,21 @@
+#  (user:pass)@Host:Port	NNTP Server to source from
+#  Interface			Network interface to use (Default or IP address)
+#  Active			NNTP Server Active list of newsgroups
+#  Act.tim			http://tools.ietf.org/html/rfc3977#section-7.6.4
+#  Newsgrp			Name of each newsgroup on the server and a short description
+#  Group			http://tools.ietf.org/html/rfc3977#section-6.1.1
+#  Xover			Overview information of the Newsgroup http://tools.ietf.org/html/rfc3977#section-8.3
+#  Arts				Actual article itself (header, body)  http://tools.ietf.org/html/rfc3977#section-6.2
+
+
+## host:port					Interface	Active	Act.tim	Newsgrp	Group	Xover	Arts
+
+# alfonsorb:ricard0@proxy.news.eu.easynews.com	DEFAULT		24h	4d	4d	60m     7d      7d
+# alfonsorb:ricard0@news.eu.easynews.com		DEFAULT		24h	4d	4d	15m     7d      7d
+p10221662:1n33dn3w5pl3as3@europe.newsdemon.com	DEFAULT		24h	4d	4d	60m     7d      7d
+
+%BeginGroups
+
+# *				news.eu.easynews.com
+# *				proxy.news.eu.easynews.com
+*				europe.newsdemon.com

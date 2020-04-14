@@ -8,14 +8,14 @@
 #  Arts				Actual article itself (header, body)  http://tools.ietf.org/html/rfc3977#section-6.2
 
 
-## host:port					Interface	Active	Act.tim	Newsgrp	Group	Xover	Arts
+## host:port			    	            	Interface	Active	Act.tim	Newsgrp	Group	Xover	Arts
 
-# alfonsorb:ricard0@proxy.news.eu.easynews.com	DEFAULT		24h	4d	4d	60m     7d      7d
-# alfonsorb:ricard0@news.eu.easynews.com		DEFAULT		24h	4d	4d	15m     7d      7d
-p10221662:1n33dn3w5pl3as3@europe.newsdemon.com	DEFAULT		24h	4d	4d	60m     7d      7d
+# user1:password1@news.eu.easynews.com          DEFAULT		24h    	4d  	4d  	60m     7d      7d
+# user2:password2@tweaknews.eu              	DEFAULT		24h 	4d  	4d  	15m     7d      7d
+user3:password3@europe.newsdemon.com            DEFAULT		24h 	4d  	4d  	60m     7d      7d
 
 %BeginGroups
 
 # *				news.eu.easynews.com
-# *				proxy.news.eu.easynews.com
+# *				tweaknews.eu
 *				europe.newsdemon.com
